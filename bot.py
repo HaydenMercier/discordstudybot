@@ -10,10 +10,10 @@ aest_tz = pytz.timezone('Australia/Sydney')
 
 class Session:
     isActive: bool = False
-    sessionStartTime: float = 0
-    sessionEndTime: float = 0
-    breakTime: float = 0
-    pausedTime: float = 0
+    sessionStartTime: int = 0
+    sessionEndTime: int = 0
+    breakTime: int = 0
+    pausedTime: int = 0
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 session = Session()
@@ -56,5 +56,14 @@ async def pause(ctx):
         session.pausedTime = ctx.message.created_at.timestamp() - session.pausedTime
         await ctx.send("Session unpaused!")
 
+
 @tasks.loop(minutes=maxSessionTimeMinutes, count=2)
 async def break_reminder():
+    if break_reminder.current_loop == 0:
+        session.breakTime += maxSessionTimeMinutes * 60
+        return
+
+    channel = bot.get_channel(channelId)
+    await channel.send(f"**Take a break!** You've been studying for {maxSessionTimeMinutes} minutes!")
+
+bot.run(botToken)
