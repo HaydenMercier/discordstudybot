@@ -78,7 +78,7 @@ async def end_session(channel):
     duration = int(session.sessionEndTime - session.sessionStartTime - session.breakTime)
     human_readable_duration = str(datetime.timedelta(seconds=duration))
 
-    await channel.send(f"Session ended after reaching the maximum time limit of {maxSessionTimeMinutes} minutes. Total duration: {human_readable_duration}")
+    await channel.send(f"Session ended. Total duration: {human_readable_duration}")
     break_reminder.stop()
 
 bot.run(botToken)
