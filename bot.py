@@ -1,22 +1,29 @@
-from discord.ext import commands, tasks
 import discord
+from discord.ext import commands, tasks
 import datetime
 import pytz
 
 botToken = ""
-channelId = 1265944846238220329
-maxSessionTimeMinutes = 30
+channelId = ""
+maxSessionTimeMinutes = 60
 aest_tz = pytz.timezone('Australia/Sydney')
 
 class Session:
-    isActive: bool = False
-    sessionStartTime: int = 0
-    sessionEndTime: int = 0
-    breakTime: int = 0
-    pausedTime: int = 0
+    def __init__(self):
+        self.isActive = False
+        self.sessionStartTime = 0
+        self.sessionEndTime = 0
+        self.breakTime = 0
+        self.pausedTime = 0
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 session = Session()
+
+@bot.event
+async def on_ready():
+    print('Bot is ready!')
+    break_reminder.start()
+    check_session_time_limit.start()
 
 @bot.command()
 async def start(ctx):
@@ -25,9 +32,8 @@ async def start(ctx):
         return
     
     session.isActive = True
-    session.sessionStartTime = ctx.message.created_at.timestamp()
+    session.sessionStartTime = datetime.datetime.now().timestamp()
     humanReadableTime = datetime.datetime.now(aest_tz).strftime("%H:%M:%S") 
-    break_reminder.start()
     await ctx.send(f"New session started at {humanReadableTime}")
 
 @bot.command()
@@ -36,12 +42,7 @@ async def end(ctx):
         await ctx.send("No session is active!")
         return
     
-    session.isActive = False
-    session.sessionEndTime = ctx.message.created_at.timestamp()
-    duration = session.sessionEndTime - session.sessionStartTime - session.breakTime - session.pausedTime
-    humanReadableDuration = str(datetime.timedelta(seconds=duration))
-    break_reminder.stop()
-    await ctx.send(f"Session ended after {humanReadableDuration}")
+    await end_session(ctx.channel)
 
 @bot.command()
 async def pause(ctx):
@@ -50,20 +51,34 @@ async def pause(ctx):
         return
     
     if session.pausedTime == 0:
-        session.pausedTime = ctx.message.created_at.timestamp()
+        session.pausedTime = datetime.datetime.now().timestamp()
         await ctx.send("Session paused!")
     else:
-        session.pausedTime = ctx.message.created_at.timestamp() - session.pausedTime
+        session.breakTime += datetime.datetime.now().timestamp() - session.pausedTime
+        session.pausedTime = 0
         await ctx.send("Session unpaused!")
 
-
-@tasks.loop(minutes=maxSessionTimeMinutes, count=2)
+@tasks.loop(minutes=maxSessionTimeMinutes)
 async def break_reminder():
-    if break_reminder.current_loop == 0:
-        session.breakTime += maxSessionTimeMinutes * 60
-        return
+    if session.isActive and session.pausedTime == 0:
+        channel = bot.get_channel(channelId)
+        await channel.send(f"**Take a break!** You've been studying for {maxSessionTimeMinutes} minutes.")
 
-    channel = bot.get_channel(channelId)
-    await channel.send(f"**Take a break!** You've been studying for {maxSessionTimeMinutes} minutes!")
+@tasks.loop(seconds=1)
+async def check_session_time_limit():
+    if session.isActive:
+        current_time = datetime.datetime.now().timestamp()
+        session_duration = current_time - session.sessionStartTime - session.breakTime
+        if session_duration >= maxSessionTimeMinutes * 60:
+            await end_session(bot.get_channel(channelId))
+
+async def end_session(channel):
+    session.isActive = False
+    session.sessionEndTime = datetime.datetime.now().timestamp()
+    duration = int(session.sessionEndTime - session.sessionStartTime - session.breakTime)
+    human_readable_duration = str(datetime.timedelta(seconds=duration))
+
+    await channel.send(f"Session ended after reaching the maximum time limit of {maxSessionTimeMinutes} minutes. Total duration: {human_readable_duration}")
+    break_reminder.stop()
 
 bot.run(botToken)
